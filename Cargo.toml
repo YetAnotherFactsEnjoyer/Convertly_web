@@ -2,6 +2,9 @@
 name = "convertly"
 version = "0.1.0"
 edition = "2024"
+authors = ["YetAnotherMechanicusEnjoyer", "YetAnotherFactsEnjoyer", "TsukiNi22"]
+description = "Convert any file to another with custom config files."
+readme = "README.md"
 
 [dependencies]
 # Error Handling
@@ -14,6 +17,9 @@ colored = "3.1.1"
 # Logger
 env_logger = "0.11.11"
 log = "0.4.33"
+
+# CLI
+clap = { version = "4.6.1", features = ["cargo", "derive", "env"] }
 
 [build-dependencies]
 cc = "1.2.60"

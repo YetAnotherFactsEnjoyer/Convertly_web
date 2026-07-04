@@ -1,5 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, Github, X } from 'lucide-react';
+import { FormEvent, useEffect, useState } from 'react';
+import { ApiError, api } from '../services/api';
+import type { AuthResponse } from '../types/api';
 
 export type AuthMode = 'signin' | 'signup';
 
@@ -8,14 +11,102 @@ interface AuthPageProps {
   mode?: AuthMode;
   onModeChange: (mode: AuthMode) => void;
   onClose: () => void;
+  onAuthenticated: (auth: AuthResponse) => void;
 }
+
+const isAuthResponse = (value: unknown): value is AuthResponse => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const auth = value as Partial<AuthResponse>;
+  return (
+    Boolean(auth.user) &&
+    typeof auth.token === 'string' &&
+    auth.token.length > 0 &&
+    typeof auth.expiresAt === 'string'
+  );
+};
 
 export default function AuthPage({
   open,
   mode = 'signin',
   onModeChange,
   onClose,
+  onAuthenticated,
 }: AuthPageProps) {
+  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setError('');
+  }, [mode]);
+
+  useEffect(() => {
+    if (!open) {
+      setError('');
+      setIsSubmitting(false);
+    }
+  }, [open]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedDisplayName = displayName.trim();
+
+    if (!trimmedEmail || !password) {
+      setError('Email et mot de passe sont requis.');
+      return;
+    }
+
+    if (mode === 'signup' && !trimmedDisplayName) {
+      setError('Le nom complet est requis.');
+      return;
+    }
+
+    if (mode === 'signup' && password.length < 8) {
+      setError('Le mot de passe doit contenir au moins 8 caractères.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      const auth =
+        mode === 'signin'
+          ? await api.login({ email: trimmedEmail, password })
+          : await api.register({
+              email: trimmedEmail,
+              password,
+              displayName: trimmedDisplayName,
+            });
+
+      if (!isAuthResponse(auth)) {
+        throw new Error('Invalid auth response from backend. Restart Spring Boot with the latest JWT code.');
+      }
+
+      onAuthenticated(auth);
+      setDisplayName('');
+      setEmail('');
+      setPassword('');
+    } catch (requestError) {
+      if (requestError instanceof ApiError) {
+        setError(requestError.message);
+      } else if (requestError instanceof Error) {
+        setError(requestError.message);
+      } else {
+        setError("Impossible de joindre l'API. Vérifiez que le backend tourne sur localhost:8080.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <AnimatePresence>
       {open && (
@@ -77,44 +168,75 @@ export default function AuthPage({
                   exit={{ opacity: 0, x: mode === 'signup' ? -16 : 16 }}
                   transition={{ duration: 0.2 }}
                 >
-                  {mode === 'signup' && (
+                  <form onSubmit={handleSubmit}>
+                    {mode === 'signup' && (
+                      <div className="mb-4">
+                        <label htmlFor="auth-name" className="mb-1.5 block text-xs font-semibold text-black/70">
+                          Nom complet
+                        </label>
+                        <input
+                          id="auth-name"
+                          type="text"
+                          value={displayName}
+                          onChange={(event) => setDisplayName(event.target.value)}
+                          placeholder="Alice Dupont"
+                          className="w-full rounded-lg border border-black/15 px-3 py-2.5 text-sm text-black outline-none transition-colors placeholder:text-black/30 focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
+                        />
+                      </div>
+                    )}
                     <div className="mb-4">
-                      <label className="mb-1.5 block text-xs font-semibold text-black/70">Nom complet</label>
+                      <label htmlFor="auth-email" className="mb-1.5 block text-xs font-semibold text-black/70">
+                        Email
+                      </label>
                       <input
-                        type="text"
-                        placeholder="Alice Dupont"
+                        id="auth-email"
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="alice@convertly.dev"
                         className="w-full rounded-lg border border-black/15 px-3 py-2.5 text-sm text-black outline-none transition-colors placeholder:text-black/30 focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
                       />
                     </div>
-                  )}
-                  <div className="mb-4">
-                    <label className="mb-1.5 block text-xs font-semibold text-black/70">Email</label>
-                    <input
-                      type="email"
-                      placeholder="alice@convertly.dev"
-                      className="w-full rounded-lg border border-black/15 px-3 py-2.5 text-sm text-black outline-none transition-colors placeholder:text-black/30 focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
-                    />
-                  </div>
-                  <div className="mb-2">
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <label className="text-xs font-semibold text-black/70">Mot de passe</label>
-                      {mode === 'signin' && (
-                        <a href="#" className="text-xs font-semibold text-purple-600 transition-colors hover:text-black">
-                          Oublié ?
-                        </a>
-                      )}
+                    <div className="mb-2">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <label htmlFor="auth-password" className="text-xs font-semibold text-black/70">
+                          Mot de passe
+                        </label>
+                        {mode === 'signin' && (
+                          <a href="#" className="text-xs font-semibold text-purple-600 transition-colors hover:text-black">
+                            Oublié ?
+                          </a>
+                        )}
+                      </div>
+                      <input
+                        id="auth-password"
+                        type="password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="••••••••"
+                        className="w-full rounded-lg border border-black/15 px-3 py-2.5 text-sm text-black outline-none transition-colors placeholder:text-black/30 focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
+                      />
                     </div>
-                    <input
-                      type="password"
-                      placeholder="••••••••"
-                      className="w-full rounded-lg border border-black/15 px-3 py-2.5 text-sm text-black outline-none transition-colors placeholder:text-black/30 focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
-                    />
-                  </div>
 
-                  <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black">
-                    {mode === 'signin' ? 'Se connecter' : 'Créer mon compte'}
-                    <ArrowRight size={16} />
-                  </button>
+                    {error && (
+                      <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
+                        {error}
+                      </p>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSubmitting
+                        ? 'Connexion...'
+                        : mode === 'signin'
+                          ? 'Se connecter'
+                          : 'Créer mon compte'}
+                      <ArrowRight size={16} />
+                    </button>
+                  </form>
                 </motion.div>
               </AnimatePresence>
 

@@ -2,9 +2,16 @@ package com.convertly.backend.controller;
 
 import com.convertly.backend.dto.ProjectDtos.ProjectRequest;
 import com.convertly.backend.dto.ProjectDtos.ProjectResponse;
+import com.convertly.backend.dto.ProjectDtos.ProjectUpdateRequest;
+import com.convertly.backend.dto.ToolDtos.ToolRunRequest;
+import com.convertly.backend.dto.ToolDtos.ToolRunResponse;
+import com.convertly.backend.entity.Project.Status;
 import com.convertly.backend.entity.User;
+import com.convertly.backend.service.AiToolService;
 import com.convertly.backend.service.ProjectService;
 import com.convertly.backend.service.UserService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -14,6 +21,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -24,10 +32,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProjectController {
     private final ProjectService projects;
     private final UserService users;
+    private final AiToolService aiTool;
+    private final ObjectMapper objectMapper;
 
-    public ProjectController(ProjectService projects, UserService users) {
+    public ProjectController(
+        ProjectService projects,
+        UserService users,
+        AiToolService aiTool,
+        ObjectMapper objectMapper
+    ) {
         this.projects = projects;
         this.users = users;
+        this.aiTool = aiTool;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping
@@ -52,10 +69,57 @@ public class ProjectController {
         return ProjectResponse.from(projects.getFor(owner, projectId));
     }
 
+    @PutMapping("/{projectId}")
+    public ProjectResponse update(
+        Authentication authentication,
+        @PathVariable UUID projectId,
+        @Valid @RequestBody ProjectUpdateRequest request
+    ) {
+        User owner = users.requireCurrentUser(authentication);
+        return ProjectResponse.from(projects.updateFor(owner, projectId, request));
+    }
+
+    @PostMapping("/{projectId}/run")
+    public ToolRunResponse runTool(
+        Authentication authentication,
+        @PathVariable UUID projectId,
+        @Valid @RequestBody ToolRunRequest request
+    ) {
+        User owner = users.requireCurrentUser(authentication);
+        projects.getFor(owner, projectId);
+
+        ToolRunResponse response = aiTool.run(request);
+        projects.updateFor(
+            owner,
+            projectId,
+            new ProjectUpdateRequest(
+                null,
+                null,
+                null,
+                Status.READY,
+                null,
+                request.source(),
+                request.instruction(),
+                response.output(),
+                writeOptionsJson(request)
+            )
+        );
+
+        return response;
+    }
+
     @DeleteMapping("/{projectId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(Authentication authentication, @PathVariable UUID projectId) {
         User owner = users.requireCurrentUser(authentication);
         projects.deleteFor(owner, projectId);
+    }
+
+    private String writeOptionsJson(ToolRunRequest request) {
+        try {
+            return objectMapper.writeValueAsString(request.options());
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Unable to serialize tool options", exception);
+        }
     }
 }

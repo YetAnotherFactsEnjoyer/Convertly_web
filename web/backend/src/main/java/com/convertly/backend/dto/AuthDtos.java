@@ -41,4 +41,14 @@ public final class AuthDtos {
             );
         }
     }
+
+    public record AuthResponse(
+        UserResponse user,
+        String token,
+        Instant expiresAt
+    ) {
+        public static AuthResponse from(User user, String token, Instant expiresAt) {
+            return new AuthResponse(UserResponse.from(user), token, expiresAt);
+        }
+    }
 }

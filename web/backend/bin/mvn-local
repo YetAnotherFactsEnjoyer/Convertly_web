@@ -3,10 +3,21 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 BACKEND_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+LOCAL_JAVA_HOME="$BACKEND_DIR/.tools/jdk-21.0.11+10"
+LOCAL_MAVEN_HOME="$BACKEND_DIR/.tools/apache-maven-3.9.16"
 
-export JAVA_HOME="$BACKEND_DIR/.tools/jdk-21.0.11+10"
-export PATH="$JAVA_HOME/bin:$BACKEND_DIR/.tools/apache-maven-3.9.16/bin:$PATH"
+if [ -d "$LOCAL_JAVA_HOME" ]; then
+  export JAVA_HOME="$LOCAL_JAVA_HOME"
+  export PATH="$JAVA_HOME/bin:$PATH"
+fi
 
-exec "$BACKEND_DIR/.tools/apache-maven-3.9.16/bin/mvn" \
+if [ -x "$LOCAL_MAVEN_HOME/bin/mvn" ]; then
+  MVN="$LOCAL_MAVEN_HOME/bin/mvn"
+  export PATH="$LOCAL_MAVEN_HOME/bin:$PATH"
+else
+  MVN=$(command -v mvn)
+fi
+
+exec "$MVN" \
   -Dmaven.repo.local="$BACKEND_DIR/.tools/m2/repository" \
   "$@"

@@ -1,13 +1,16 @@
 import type {
-  ApiCredentials,
+  ApiAuth,
+  AuthResponse,
   LoginRequest,
   ProjectRequest,
   ProjectResponse,
   RegisterRequest,
+  ToolRunRequest,
+  ToolRunResponse,
   UserResponse
 } from "../types/api";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
+export const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
 class ApiError extends Error {
   status: number;
@@ -19,15 +22,10 @@ class ApiError extends Error {
   }
 }
 
-const encodeBasicAuth = ({ email, password }: ApiCredentials) => {
-  const token = window.btoa(unescape(encodeURIComponent(`${email}:${password}`)));
-  return `Basic ${token}`;
-};
-
 async function apiRequest<T>(
   path: string,
   init: RequestInit = {},
-  credentials?: ApiCredentials
+  auth?: ApiAuth
 ): Promise<T> {
   const headers = new Headers(init.headers);
 
@@ -35,14 +33,20 @@ async function apiRequest<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  if (credentials) {
-    headers.set("Authorization", encodeBasicAuth(credentials));
+  if (auth) {
+    headers.set("Authorization", `Bearer ${auth.token}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers
+    });
+  } catch {
+    throw new ApiError(0, `Unable to reach backend at ${API_BASE_URL}. Is Spring Boot running?`);
+  }
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
@@ -53,6 +57,10 @@ async function apiRequest<T>(
     } catch {
       const text = await response.text();
       message = text || message;
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      message = "Your session expired or is invalid. Please sign in again.";
     }
 
     throw new ApiError(response.status, message);
@@ -67,31 +75,69 @@ async function apiRequest<T>(
 
 export const api = {
   register(payload: RegisterRequest) {
-    return apiRequest<UserResponse>("/api/auth/register", {
+    return apiRequest<AuthResponse>("/api/auth/register", {
       method: "POST",
       body: JSON.stringify(payload)
     });
   },
   login(payload: LoginRequest) {
-    return apiRequest<UserResponse>("/api/auth/login", {
+    return apiRequest<AuthResponse>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify(payload)
     });
   },
-  me(credentials: ApiCredentials) {
-    return apiRequest<UserResponse>("/api/users/me", {}, credentials);
+  me(auth: ApiAuth) {
+    return apiRequest<UserResponse>("/api/users/me", {}, auth);
   },
-  listProjects(credentials: ApiCredentials) {
-    return apiRequest<ProjectResponse[]>("/api/projects", {}, credentials);
+  listProjects(auth: ApiAuth) {
+    return apiRequest<ProjectResponse[]>("/api/projects", {}, auth);
   },
-  createProject(credentials: ApiCredentials, payload: ProjectRequest) {
+  getProject(auth: ApiAuth, projectId: string) {
+    return apiRequest<ProjectResponse>(`/api/projects/${projectId}`, {}, auth);
+  },
+  createProject(auth: ApiAuth, payload: ProjectRequest) {
     return apiRequest<ProjectResponse>(
       "/api/projects",
       {
         method: "POST",
         body: JSON.stringify(payload)
       },
-      credentials
+      auth
+    );
+  },
+  updateProject(auth: ApiAuth, projectId: string, payload: Partial<ProjectRequest>) {
+    return apiRequest<ProjectResponse>(
+      `/api/projects/${projectId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(payload)
+      },
+      auth
+    );
+  },
+  deleteProject(auth: ApiAuth, projectId: string) {
+    return apiRequest<void>(
+      `/api/projects/${projectId}`,
+      {
+        method: "DELETE"
+      },
+      auth
+    );
+  },
+  runProjectTool(
+    auth: ApiAuth,
+    projectId: string,
+    payload: ToolRunRequest,
+    signal?: AbortSignal
+  ) {
+    return apiRequest<ToolRunResponse>(
+      `/api/projects/${projectId}/run`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+        signal
+      },
+      auth
     );
   }
 };

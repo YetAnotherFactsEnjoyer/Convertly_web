@@ -7,7 +7,7 @@ import com.convertly.backend.dto.ToolDtos.ToolRunRequest;
 import com.convertly.backend.dto.ToolDtos.ToolRunResponse;
 import com.convertly.backend.entity.Project.Status;
 import com.convertly.backend.entity.User;
-import com.convertly.backend.service.AiToolService;
+import com.convertly.backend.service.InterpreterService;
 import com.convertly.backend.service.ProjectService;
 import com.convertly.backend.service.UserService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -32,18 +32,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProjectController {
     private final ProjectService projects;
     private final UserService users;
-    private final AiToolService aiTool;
+    private final InterpreterService interpreter;
     private final ObjectMapper objectMapper;
 
     public ProjectController(
         ProjectService projects,
         UserService users,
-        AiToolService aiTool,
+        InterpreterService interpreter,
         ObjectMapper objectMapper
     ) {
         this.projects = projects;
         this.users = users;
-        this.aiTool = aiTool;
+        this.interpreter = interpreter;
         this.objectMapper = objectMapper;
     }
 
@@ -88,7 +88,7 @@ public class ProjectController {
         User owner = users.requireCurrentUser(authentication);
         projects.getFor(owner, projectId);
 
-        ToolRunResponse response = aiTool.run(request);
+        ToolRunResponse response = interpreter.run(request);
         projects.updateFor(
             owner,
             projectId,

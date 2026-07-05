@@ -23,6 +23,11 @@ convertly:
     api-key: ${GROQ_API_KEY:}
     api-url: ${AI_API_URL:https://api.groq.com/openai/v1/chat/completions}
     model: ${AI_MODEL:llama-3.1-8b-instant}
+  interpreter:
+    host: ${INTERPRETER_HOST:127.0.0.1}
+    port: ${INTERPRETER_PORT:7878}
+    timeout: ${INTERPRETER_TIMEOUT:PT15S}
+    max-frame-bytes: ${INTERPRETER_MAX_FRAME_BYTES:4194304}
   jwt:
     secret: ${JWT_SECRET:convertly-local-development-jwt-secret-change-me}
     expires-in: ${JWT_EXPIRES_IN:PT2H}
